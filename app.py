@@ -49,20 +49,72 @@ def index():
   return '<h1>mY Todo API</h1>'
 
 # Task 3.1 Here
-
-# Task 3.2 Here
-
+def login_user(username, password):
+  user = User.query.filter_by(username=username).first()
+  if user and user.check_password(password):
+    token = create_access_token(identity=username)
+    response = jsonify(access_token=token)
+    set_access_cookies(response, token)
+    return response
+  return jsonify(message="Invalid username or password"), 401
+  
+# Task 3.2 Here 
+#expect the user to have a json object to convert to a python dictionary.
+@app.route('/login', methods=['POST'])
+def user_login_view():
+  data = request.json
+  response = login_user(data['username'], data['password'])
+  if not response:
+    return jsonify(message='bad username or password given'), 403
+  return response
+  
 # Task 3.3 Here
-
+@app.route('/identify')
+@jwt_required() #this allows only a person who is logged in to access this route.
+def identify_view():
+  username = get_jwt_identity()
+  user = User.query.filter_by(username=username).first()
+  if user:
+    return jsonify(user.get_json())
+  return jsonify(message='Invalid user'), 403
+  
 # Task 3.4 Here
-
+@app.route('/logout', methods=['GET'])
+def logout():
+  response = jsonify(message='Logged out')
+  unset_jwt_cookies(response)
+  return response
+  
 # Task 4 Here
-
+@app.route('/signup', methods=['POST'])
+def signup_user_view():
+  data = request.json
+  try:
+    new_user = RegularUser(data['username'], data['email'], data['password'])
+    db.session.add(new_user)
+    db.session.commit()
+    return login_user(data['username'], data['password'])  
+  except IntegrityError:
+    db.session.rollback()
+    return jsonify(message='Username already exists'), 400
+    
 # ********** Todo Crud Operations ************
-
+@app.route('/todos', methods=['GET'])
+@jwt_required()
+def get_all_user_todos():
+  user = RegularUser.query.filter_by(username=get_jwt_identity()).first()
+  todo_json = [ todo.get_json() for todo in user.todos ]
+  return jsonify(todo_json), 200
 
 # Task 5.1 Here POST /todos
-
+@app.route('/todos', methods=['POST'])
+@login_required(RegularUser)
+def create_todo_view():
+  data = request.json
+  username = get_jwt_identity()
+  user = RegularUser.query.filter_by(username=username).first()
+  new_todo = user.add_todo(data['text'])
+  return jsonify(message=f'todo {new_todo.id} created!'), 201
 # Task 5.2 Here GET /todos
 
 # Task 5.3 Here GET /todos/id
